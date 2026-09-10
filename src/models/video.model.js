@@ -5,23 +5,23 @@ const videoSchema = new Schema(
   {
     videoFile: {
       type: String, //cloudnary Url
-      requied: true,
+      required: true,
     },
     thumbnail: {
       type: String, //cloudnary Url
-      requied: true,
+      required: true,
     },
     title: {
       type: String,
-      requied: true,
+      required: true,
     },
     description: {
       type: String,
-      requied: true,
+      required: true,
     },
     duration: {
       type: Number,
-      requied: true,
+      required: true,
     },
     views: {
       type: Number,
@@ -33,7 +33,7 @@ const videoSchema = new Schema(
     },
     owner: {
       type: Schema.Types.ObjectId,
-      ref: "Üser",
+      ref: "User",
     },
   },
   { timestamps: true }
