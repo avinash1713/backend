@@ -18,7 +18,6 @@ const registerUser = asyncHandler(async (req, res) => {
 
   //step 1 : details from user
   const { fullName, username, email, password } = req.body;
-  console.log("email:", email);
 
   // step 2 : validate the fields
 
@@ -30,12 +29,14 @@ const registerUser = asyncHandler(async (req, res) => {
 
   if (
     [fullName, email, username, password].some((field) => field?.trim() === "")
+    //[10, 20, 30, 5].some((number) => number < 10)  Result:true
+    //"   Rahul   ".trim()  becomes:"Rahul"
   ) {
     throw new ApiError(400, "All fields are required");
   }
 
   //step 3 : check if there is already an email or username in db
-  const existedUser = User.findOne({
+  const existedUser = await User.findOne({
     //-> findOne will return the first time it find the email or username , first occurance
     $or: [{ username }, { email }],
   });
@@ -45,8 +46,18 @@ const registerUser = asyncHandler(async (req, res) => {
   }
 
   //step 4: check for avatar and coverImage
-  const avatarLocalPath = req.files?.avatar[0]?.path;
-  const coverImageLocalPath = req.files?.coverImage[0]?.path;
+
+  const avatarLocalPath = req.files?.avatar?.[0]?.path;
+  const coverImageLocalPath = req.files?.coverImage?.[0]?.path;
+
+  // let coverImageLocalPath;
+  // if (
+  //   req.files &&
+  //   Array.isArray(req.files.coverImage) &&
+  //   req.files.coverImage.length > 0
+  // ) {
+  //   coverImageLocalPath = req.files.coverImage[0].path;
+  // }
 
   if (!avatarLocalPath) {
     throw new ApiError(400, "avatar file is required");
@@ -76,14 +87,14 @@ const registerUser = asyncHandler(async (req, res) => {
     "-password -refreshToken"
   );
 
-  if (createdUser) {
+  if (!createdUser) {
     throw new ApiError(500, "Something went wrong while registering the user");
   }
 
   //step 8: send response
   return res
     .status(201)
-    .json(new ApiResponse(200, createdUser, "user registerd successfully"));
+    .json(new ApiResponse(201, createdUser, "user registerd successfully"));
 });
 
 export { registerUser };
