@@ -221,7 +221,19 @@ const logoutUser = asyncHandler(async (req, res) => {
 });
 
 const refreshAccessToken = asyncHandler(async (req, res) => {
-  //you need to send me the refreshToken to me so i can access that from cookies
+  // Get refresh token from request
+  // Check if refresh token is available
+  // Verify the refresh token using REFRESH_TOKEN_SECRET
+  // Get the user ID from the decoded refresh token
+  // Find the user in MongoDB
+  // Check if user exists
+  // Compare incoming refresh token with refresh token saved in DB
+  // Generate new Access Token // Generate new Refresh Token
+  // Save the new Refresh Token in DB
+  // Send new Access Token and Refresh Token as httpOnly cookies
+  // Send response
+
+  // Step 1 : you need to send me the refreshToken to me so i can access that from cookies
   const incomingRefreshToken =
     req.cookies.refreshToken || req.body.refreshToken;
 
@@ -230,38 +242,39 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
   }
 
   try {
-    // now we need to verify the token
+    // Step 2 : now we need to verify the token
     const decodedToken = jwt.verify(
       incomingRefreshToken,
       process.env.REFRESH_TOKEN_SECRET
     );
 
-    //we need to get the user with same refresh token from db
+    // Step 3 : we need to get the user with same refresh token from db
     const user = await User.findById(decodedToken?._id);
 
-    //now we check if user is avaialable or not someone might give fake token
+    // Step 4 : now we check if user is avaialable or not someone might give fake token
     if (!user) {
       throw new ApiError(401, "Invalid refresh token");
     }
 
-    //incomingrefresh token - token given by user
+    // Step 5 :
+    // incomingrefresh token - token given by user
     // then we have a refresh token that we save in db in method generateAccessAndRefreshToken
-    //threfore the user that we find from that incomingRefreshToken also have same a refreshtoken that we store for that user in db
+    // threfore the user that we find from that incomingRefreshToken also have same a refreshtoken that we store for that user in db
 
     if (incomingRefreshToken != user?.refreshToken) {
       throw new ApiError(401, "Refresh token is expired or used");
     }
 
-    // genrate new refreshtoken if same
+    // Step 6 : genrate new refreshtoken if same
     const { accessToken, refreshToken: newRefreshToken } =
       await generateAccessAndRefreshTokens(user._id);
 
+    // Step 7 : send response
     const options = {
       httpOnly: true,
       secure: true,
     };
 
-    // send response
     return res
       .status(200)
       .cookie("accessToken", accessToken, options)
