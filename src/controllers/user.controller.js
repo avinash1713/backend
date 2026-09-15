@@ -1,7 +1,10 @@
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { User } from "../models/user.models.js";
-import { uploadOnCloudinary } from "../utils/cloudinary.js";
+import {
+  deleteFromCloudinary,
+  uploadOnCloudinary,
+} from "../utils/cloudinary.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import jwt from "jsonwebtoken";
 
@@ -96,6 +99,7 @@ const registerUser = asyncHandler(async (req, res) => {
   const user = await User.create({
     fullName,
     avatar: avatar.url,
+    avatarPublicId: avatar.public_id,
     coverImage: coverImage?.url || "",
     email,
     password,
@@ -355,6 +359,40 @@ const updateAccountDetails = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, user, "Account details updated successfully"));
 });
 
+// const updateUserAvatar = asyncHandler(async (req, res) => {
+//   // Step 1: Get the local path of the uploaded avatar file from Multer
+//   const avatarLocalPath = req.file?.path; // we get this from multer middleware
+
+//   // Step 2: Check whether an avatar file was uploaded
+//   if (!avatarLocalPath) {
+//     throw new ApiError(400, "Avatar file is missing");
+//   }
+
+//   // Step 3: Upload the avatar file from the local path to Cloudinary
+//   const avatar = await uploadOnCloudinary(avatarLocalPath);
+
+//   // Step 4: Check whether the avatar was successfully uploaded to Cloudinary
+//   if (!avatar.url) {
+//     throw new ApiError(400, "Error while uploading avatar on cloudinary");
+//   }
+
+//   // Step 5: Find the current user and update their avatar URL
+//   // new: true returns the updated user document
+//   // select("-password") prevents the password from being included
+//   const user = await User.findByIdAndUpdate(
+//     req.user._id,
+//     {
+//       $set: { avatar: avatar.url },
+//     },
+//     { new: true }
+//   ).select("-password");
+
+//   // Step 6: Return the updated user details as the response
+//   return res
+//     .status(200)
+//     .json(new ApiResponse(200, user, "Avatar updated successfully"));
+// });
+
 const updateUserAvatar = asyncHandler(async (req, res) => {
   // Step 1: Get the local path of the uploaded avatar file from Multer
   const avatarLocalPath = req.file?.path; // we get this from multer middleware
@@ -368,25 +406,37 @@ const updateUserAvatar = asyncHandler(async (req, res) => {
   const avatar = await uploadOnCloudinary(avatarLocalPath);
 
   // Step 4: Check whether the avatar was successfully uploaded to Cloudinary
-  if (!avatar.url) {
+  if (!avatar?.url) {
     throw new ApiError(400, "Error while uploading avatar on cloudinary");
   }
 
-  // Step 5: Find the current user and update their avatar URL
-  // new: true returns the updated user document
-  // select("-password") prevents the password from being included
-  const user = await User.findByIdAndUpdate(
-    req.user._id,
-    {
-      $set: { avatar: avatar.url },
-    },
-    { new: true }
-  ).select("-password");
+  // Step 5: Find the current user to get the old avatar public_id
+  const user = await User.findById(req.user._id);
 
-  // Step 6: Return the updated user details as the response
+  if (!user) {
+    throw new ApiError(404, "User not found");
+  }
+
+  // Step 6: Delete the old avatar from Cloudinary
+  if (user.avatarPublicId) {
+    await deleteFromCloudinary(user.avatarPublicId);
+  }
+
+  // Step 7: Update the user's avatar URL and public_id with the new image
+  user.avatar = avatar.url;
+  user.avatarPublicId = avatar.public_id;
+
+  await user.save({ validateBeforeSave: false });
+
+  // Step 8: Get the updated user without password and refreshToken
+  const updatedUser = await User.findById(user._id).select(
+    "-password -refreshToken"
+  );
+
+  // Step 9: Return the updated user details as the response
   return res
     .status(200)
-    .json(new ApiResponse(200, user, "Avatar updated successfully"));
+    .json(new ApiResponse(200, updatedUser, "Avatar updated successfully"));
 });
 
 const updateUserCoverImage = asyncHandler(async (req, res) => {

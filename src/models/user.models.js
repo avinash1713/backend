@@ -29,6 +29,11 @@ const userSchema = new Schema(
       type: String, //cloudnary URL
       required: true,
     },
+
+    avatarPublicId: {
+      type: String, //cloudinary public_id
+    },
+
     coverImage: {
       type: String, //cloudnary URL
     },
