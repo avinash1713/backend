@@ -3,7 +3,7 @@ import { Playlist } from "../models/playlist.models.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
-
+import { Video } from "../models/video.models.js";
 // const createPlaylist = asyncHandler(async (req, res) => {
 //   const { name, description } = req.body;
 
@@ -123,7 +123,7 @@ const deletePlaylist = asyncHandler(async (req, res) => {
 
   return res
     .status(200)
-    .json(new ApiResponse(200, {}, "playlist updated successfully"));
+    .json(new ApiResponse(200, {}, "playlist deleted successfully"));
 });
 
 const addVideoToPlaylist = asyncHandler(async (req, res) => {
@@ -144,8 +144,8 @@ const addVideoToPlaylist = asyncHandler(async (req, res) => {
   }
 
   if (
-    (playlist.owner?.toString() && video.owner.toString()) !==
-    req.user?._id.toString()
+    playlist.owner?.toString() !== req.user?._id.toString() ||
+    video.owner?.toString() !== req.user?._id.toString()
   ) {
     throw new ApiError(400, "only owner can add video to thier playlist");
   }
@@ -193,8 +193,8 @@ const removeVideoFromPlaylist = asyncHandler(async (req, res) => {
   }
 
   if (
-    (playlist.owner?.toString() && video.owner.toString()) !==
-    req.user?._id.toString()
+    playlist.owner?.toString() !== req.user?._id.toString() ||
+    video.owner?.toString() !== req.user?._id.toString()
   ) {
     throw new ApiError(404, "only owner can remove video from thier playlist");
   }
@@ -220,6 +220,93 @@ const removeVideoFromPlaylist = asyncHandler(async (req, res) => {
     );
 });
 
+// const getPlaylistById = asyncHandler(async (req, res) => {
+//   const { playlistId } = req.params;
+
+//   if (!isValidObjectId(playlistId)) {
+//     throw new ApiError(400, "Invalid PlaylistId");
+//   }
+
+//   const playlist = await Playlist.findById(playlistId);
+
+//   if (!playlist) {
+//     throw new ApiError(404, "Playlist not found");
+//   }
+
+//   const playlistVideos = await Playlist.aggregate([
+//     {
+//       $match: {
+//         _id: new mongoose.Types.ObjectId(playlistId),
+//       },
+//     },
+//     {
+//       $lookup: {
+//         from: "videos",
+//         localField: "videos",
+//         foreignField: "_id",
+//         as: "videos",
+//       },
+//     },
+//     {
+//       $match: {
+//         "videos.isPublished": true,
+//       },
+//     },
+//     {
+//       $lookup: {
+//         from: "users",
+//         localField: "owner",
+//         foreignField: "_id",
+//         as: "owner",
+//       },
+//     },
+//     {
+//       $addFields: {
+//         totalVideos: {
+//           $size: "$videos",
+//         },
+//         totalViews: {
+//           $sum: "$videos.views",
+//         },
+//         owner: {
+//           $first: "$owner",
+//         },
+//       },
+//     },
+//     {
+//       $project: {
+//         name: 1,
+//         description: 1,
+//         createdAt: 1,
+//         updatedAt: 1,
+//         totalVideos: 1,
+//         totalViews: 1,
+//         videos: {
+//           _id: 1,
+//           "videoFile.url": 1,
+//           "thumbnail.url": 1,
+//           title: 1,
+//           description: 1,
+//           duration: 1,
+//           createdAt: 1,
+//           views: 1,
+//         },
+//         owner: {
+//           username: 1,
+//           fullName: 1,
+//           "avatar.url": 1,
+//         },
+//       },
+//     },
+//   ]);
+
+//   return res
+//     .status(200)
+//     .json(
+//       new ApiResponse(200, playlistVideos[0], "playlist fetched successfully")
+//     );
+// });
+
 const getPlaylistById = asyncHandler(async (req, res) => {
   const { playlistId } = req.params;
 
@@ -239,6 +326,7 @@ const getPlaylistById = asyncHandler(async (req, res) => {
         _id: new mongoose.Types.ObjectId(playlistId),
       },
     },
+
     {
       $lookup: {
         from: "videos",
@@ -247,11 +335,7 @@ const getPlaylistById = asyncHandler(async (req, res) => {
         as: "videos",
       },
     },
-    {
-      $match: {
-        "videos.isPublished": true,
-      },
-    },
+
     {
       $lookup: {
         from: "users",
@@ -260,27 +344,26 @@ const getPlaylistById = asyncHandler(async (req, res) => {
         as: "owner",
       },
     },
+
     {
       $addFields: {
-        totalVideos: {
-          $size: "$videos",
-        },
-        totalViews: {
-          $sum: "$videos.views",
-        },
-        owner: {
-          $first: "$owner",
-        },
+        totalVideos: { $size: "$videos" },
+        totalViews: { $sum: "$videos.views" },
+        owner: { $first: "$owner" },
       },
     },
+
     {
       $project: {
+        _id: 1,
         name: 1,
         description: 1,
         createdAt: 1,
         updatedAt: 1,
+
         totalVideos: 1,
         totalViews: 1,
+
         videos: {
           _id: 1,
           "videoFile.url": 1,
@@ -291,7 +374,9 @@ const getPlaylistById = asyncHandler(async (req, res) => {
           createdAt: 1,
           views: 1,
         },
+
         owner: {
+          _id: 1,
           username: 1,
           fullName: 1,
           "avatar.url": 1,
@@ -306,7 +391,6 @@ const getPlaylistById = asyncHandler(async (req, res) => {
       new ApiResponse(200, playlistVideos[0], "playlist fetched successfully")
     );
 });
-
 const getUserPlaylists = asyncHandler(async (req, res) => {
   const { userId } = req.params;
 

@@ -3,6 +3,8 @@ import { Comment } from "../models/comments.models.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
+import { Video } from "../models/video.models.js";
+import { Like } from "../models/likes.models.js";
 
 // const getVideoComments = asyncHandler(async (req, res) => {
 //   //TODO: get all comments for a video
@@ -82,6 +84,7 @@ const getVideoComments = asyncHandler(async (req, res) => {
         createdAt: 1,
         likesCount: 1,
         owner: {
+          _id: 1,
           username: 1,
           fullName: 1,
           "avatar.url": 1,

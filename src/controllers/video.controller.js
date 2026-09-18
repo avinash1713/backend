@@ -4,10 +4,13 @@ import { User } from "../models/user.models.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
+
 import {
   deleteFromCloudinary,
   uploadOnCloudinary,
 } from "../utils/cloudinary.js";
+import { Like } from "../models/likes.models.js";
+import { Comment } from "../models/comments.models.js";
 
 // const getAllVideos = asyncHandler(async (req, res) => {
 //   const { page = 1, limit = 10, query, sortBy, sortType, userId } = req.query;
@@ -182,10 +185,13 @@ import {
 //       )
 //     );
 // });
+
 // get all videos based on query, sort, pagination
 const getAllVideos = asyncHandler(async (req, res) => {
   const { page = 1, limit = 10, query, sortBy, sortType, userId } = req.query;
+
   console.log(userId);
+
   const pipeline = [];
 
   // for using Full Text based search u need to create a search index in mongoDB atlas
@@ -196,7 +202,7 @@ const getAllVideos = asyncHandler(async (req, res) => {
   if (query) {
     pipeline.push({
       $search: {
-        index: "search-videos",
+        index: "default",
         text: {
           query: query,
           path: ["title", "description"], //search only on title, desc
@@ -218,7 +224,11 @@ const getAllVideos = asyncHandler(async (req, res) => {
   }
 
   // fetch videos only that are set isPublished as true
-  pipeline.push({ $match: { isPublished: true } });
+  pipeline.push({
+    $match: {
+      isPublished: true,
+    },
+  });
 
   //sortBy can be views, createdAt, duration
   //sortType can be ascending(-1) or descending(1)
@@ -229,7 +239,11 @@ const getAllVideos = asyncHandler(async (req, res) => {
       },
     });
   } else {
-    pipeline.push({ $sort: { createdAt: -1 } });
+    pipeline.push({
+      $sort: {
+        createdAt: -1,
+      },
+    });
   }
 
   pipeline.push(
@@ -254,14 +268,42 @@ const getAllVideos = asyncHandler(async (req, res) => {
     }
   );
 
-  const videoAggregate = Video.aggregate(pipeline);
+  const pageNumber = parseInt(page, 10);
+  const limitNumber = parseInt(limit, 10);
 
-  const options = {
-    page: parseInt(page, 10),
-    limit: parseInt(limit, 10),
+  const skip = (pageNumber - 1) * limitNumber;
+
+  // Get total number of matching videos
+  const countPipeline = [...pipeline, { $count: "totalVideos" }];
+
+  const countResult = await Video.aggregate(countPipeline);
+
+  const totalVideos = countResult[0]?.totalVideos || 0;
+
+  // Add pagination
+  pipeline.push({
+    $skip: skip,
+  });
+
+  pipeline.push({
+    $limit: limitNumber,
+  });
+
+  const videos = await Video.aggregate(pipeline);
+
+  const totalPages = Math.ceil(totalVideos / limitNumber);
+
+  const video = {
+    docs: videos,
+    totalDocs: totalVideos,
+    limit: limitNumber,
+    page: pageNumber,
+    totalPages,
+    hasNextPage: pageNumber < totalPages,
+    hasPrevPage: pageNumber > 1,
+    nextPage: pageNumber < totalPages ? pageNumber + 1 : null,
+    prevPage: pageNumber > 1 ? pageNumber - 1 : null,
   };
-
-  const video = await Video.aggregatePaginate(videoAggregate, options);
 
   return res
     .status(200)
@@ -452,8 +494,76 @@ const getVideoById = asyncHandler(async (req, res) => {
 });
 
 // update video details like title, description, thumbnail
+// const updateVideo = asyncHandler(async (req, res) => {
+//   const { title, description } = req.body;
+//   const { videoId } = req.params;
+
+//   if (!isValidObjectId(videoId)) {
+//     throw new ApiError(400, "Invalid videoId");
+//   }
+
+//   if (!(title && description)) {
+//     throw new ApiError(400, "title and description are required");
+//   }
+
+//   const video = await Video.findById(videoId);
+
+//   if (!video) {
+//     throw new ApiError(404, "No video found");
+//   }
+
+//   if (video?.owner.toString() !== req.user?._id.toString()) {
+//     throw new ApiError(
+//       400,
+//       "You can't edit this video as you are not the owner"
+//     );
+//   }
+
+//   //deleting old thumbnail and updating with new one
+//   const thumbnailToDelete = video.thumbnail.public_id;
+
+//   const thumbnailLocalPath = req.file?.path;
+
+//   if (!thumbnailLocalPath) {
+//     throw new ApiError(400, "thumbnail is required");
+//   }
+
+//   const thumbnail = await uploadOnCloudinary(thumbnailLocalPath);
+
+//   if (!thumbnail) {
+//     throw new ApiError(400, "thumbnail not found");
+//   }
+
+//   const updatedVideo = await Video.findByIdAndUpdate(
+//     videoId,
+//     {
+//       $set: {
+//         title,
+//         description,
+//         thumbnail: {
+//           public_id: thumbnail.public_id,
+//           url: thumbnail.url,
+//         },
+//       },
+//     },
+//     { new: true }
+//   );
+
+//   if (!updatedVideo) {
+//     throw new ApiError(500, "Failed to update video please try again");
+//   }
+
+//   if (updatedVideo) {
+//     await deleteOnCloudinary(thumbnailToDelete);
+//   }
+
+//   return res
+//     .status(200)
+//     .json(new ApiResponse(200, updatedVideo, "Video updated successfully"));
+// });
 const updateVideo = asyncHandler(async (req, res) => {
   const { title, description } = req.body;
+
   const { videoId } = req.params;
 
   if (!isValidObjectId(videoId)) {
@@ -477,19 +587,24 @@ const updateVideo = asyncHandler(async (req, res) => {
     );
   }
 
-  //deleting old thumbnail and updating with new one
-  const thumbnailToDelete = video.thumbnail.public_id;
+  // Keep the existing thumbnail by default
+  let thumbnailData = video.thumbnail;
+  let thumbnailToDelete = null;
 
-  const thumbnailLocalPath = req.file?.path;
+  // If a new thumbnail is provided, upload it and replace the old one
+  if (req.file?.path) {
+    thumbnailToDelete = video.thumbnail.public_id;
 
-  if (!thumbnailLocalPath) {
-    throw new ApiError(400, "thumbnail is required");
-  }
+    const thumbnail = await uploadOnCloudinary(req.file.path);
 
-  const thumbnail = await uploadOnCloudinary(thumbnailLocalPath);
+    if (!thumbnail) {
+      throw new ApiError(400, "thumbnail not found");
+    }
 
-  if (!thumbnail) {
-    throw new ApiError(400, "thumbnail not found");
+    thumbnailData = {
+      public_id: thumbnail.public_id,
+      url: thumbnail.url,
+    };
   }
 
   const updatedVideo = await Video.findByIdAndUpdate(
@@ -498,10 +613,7 @@ const updateVideo = asyncHandler(async (req, res) => {
       $set: {
         title,
         description,
-        thumbnail: {
-          public_id: thumbnail.public_id,
-          url: thumbnail.url,
-        },
+        thumbnail: thumbnailData,
       },
     },
     { new: true }
@@ -511,7 +623,8 @@ const updateVideo = asyncHandler(async (req, res) => {
     throw new ApiError(500, "Failed to update video please try again");
   }
 
-  if (updatedVideo) {
+  // Delete old thumbnail only if a new thumbnail was uploaded
+  if (updatedVideo && thumbnailToDelete) {
     await deleteOnCloudinary(thumbnailToDelete);
   }
 
@@ -547,8 +660,8 @@ const deleteVideo = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Failed to delete the video please try again");
   }
 
-  await deleteOnCloudinary(video.thumbnail.public_id); // video model has thumbnail public_id stored in it->check videoModel
-  await deleteOnCloudinary(video.videoFile.public_id, "video"); // specify video while deleting video
+  await deleteFromCloudinary(video.thumbnail.public_id); // video model has thumbnail public_id stored in it->check videoModel
+  await deleteFromCloudinary(video.videoFile.public_id, "video"); // specify video while deleting video
 
   // delete video likes
   await Like.deleteMany({
