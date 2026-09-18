@@ -183,6 +183,7 @@ const loginUser = asyncHandler(async (req, res) => {
   const options = {
     httpOnly: true, // By default anyone can modify our cokkie form frontend but when we pass
     secure: true, // these 2 options so now they can be modfied from server only
+    sameSite: "none",
   };
 
   //step 9 : send response
@@ -214,6 +215,7 @@ const logoutUser = asyncHandler(async (req, res) => {
   const options = {
     httpOnly: true,
     secure: true,
+    sameSite: "none",
   };
 
   // Clear both accessToken and refreshToken cookies
@@ -278,6 +280,7 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
     const options = {
       httpOnly: true,
       secure: true,
+      sameSite: "none",
     };
 
     return res
